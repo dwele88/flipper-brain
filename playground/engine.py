@@ -37,6 +37,7 @@ class Playground:
         self._interval = 20
         self._last_event: str | None = None
         self._cycle = 0
+        self._gen = 0  # incremented on every start(); stale threads exit
 
     # -- control ----------------------------------------------------------
 
@@ -44,12 +45,13 @@ class Playground:
         if mood not in MOODS:
             raise ValueError(f"unknown mood {mood!r}; choose from {sorted(MOODS)}")
         self.stop()
+        self._gen += 1
         self._mood = mood
         # Clamp: at least 5s, at most a day (huge values overflow Event.wait).
         self._interval = min(86400, max(5, int(interval)))
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, name="playground",
-                                        daemon=True)
+                                        args=(self._gen,), daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -206,11 +208,13 @@ class Playground:
                          f"{Memory.ago(self.memory.last_run(last))}.")
         return " ".join(parts)
 
-    def _loop(self) -> None:
+    def _loop(self, gen: int) -> None:
         assert self._mood is not None
         mood_key = self._mood
         self._think(f"Waking up in {MOODS[mood_key]['label']} mode…", "curious")
-        while not self._stop.is_set():
+        # gen check: if stop()'s join() timed out and a new generation
+        # started, this stale thread exits instead of driving the flipper.
+        while not self._stop.is_set() and gen == self._gen:
             self._cycle += 1
             state = sense(self.flipper)
             if not state.get("reachable"):

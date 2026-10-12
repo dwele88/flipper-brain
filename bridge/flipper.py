@@ -112,6 +112,11 @@ class FlipperConnection:
                 buf += chunk
                 if buf.endswith(PROMPT):
                     break
+            else:
+                # No data (yet): yield briefly instead of busy-spinning.
+                # Real serial reads block on the OS timeout, so this only
+                # triggers on dead links — where spinning would pin a CPU.
+                time.sleep(0.01)
             if stop_at and time.time() >= stop_at and not interrupted:
                 self._ser.write(CTRL_C)
                 interrupted = True
@@ -199,6 +204,12 @@ class FlipperConnection:
     def reboot(self) -> str:
         # Don't wait for a prompt that will never come back.
         try:
-            return self.send("power reboot", timeout=3)
+            self.send("power reboot", timeout=3)
         except FlipperError:
-            return "reboot sent"
+            pass
+        finally:
+            # The device is rebooting: the USB serial link is gone. Drop the
+            # stale handle now so the next command reconnects cleanly instead
+            # of waiting out a full timeout on a dead fd.
+            self.close()
+        return "reboot sent"

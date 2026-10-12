@@ -58,4 +58,5 @@ MIT — your hardware, your toy. See [SAFETY](docs/SAFETY.md) before exploring.
 ## Support
 
 Free and open source. If Flipper Brain made your Flipper a little more alive,
-tips are welcome — [SUPPORT.md](SUPPORT.md). BiMPay (Barbados) preferred. 🇧🇧
+tips are welcome — [SUPPORT.md](SUPPORT.md). BiMPay (Barbados) preferred 🇧🇧,
+BTC / ETH / SOL also accepted.
