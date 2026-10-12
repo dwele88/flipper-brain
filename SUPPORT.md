@@ -1,6 +1,6 @@
-# Supporting Flipper Brain
+# Supporting NeuroFlipper
 
-Flipper Brain is free and open source. If it made your Flipper a little more
+NeuroFlipper is free and open source. If it made your Flipper a little more
 alive, a tip is appreciated — it goes toward hardware for testing and
 keeping the project maintained.
 

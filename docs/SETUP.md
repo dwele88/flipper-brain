@@ -52,8 +52,8 @@ multiple working third-party clients and Momentum firmware source analysis:
 ## Install (Bridge mode)
 
 ```bash
-git clone <this-repo> flipper-brain
-cd flipper-brain
+git clone <this-repo> neuroflipper
+cd neuroflipper
 pip install -r requirements.txt   # flask, pyserial, pyyaml
 cp config.yaml.example config.yaml
 ```
@@ -74,7 +74,7 @@ Find your port:
 
 ```bash
 python -m bridge.server
-# → Flipper Brain bridge on http://127.0.0.1:8787
+# → NeuroFlipper bridge on http://127.0.0.1:8787
 ```
 
 Open that URL. The lil brain does its intro, then:

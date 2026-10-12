@@ -1,6 +1,6 @@
 # Safety
 
-Flipper Brain is a personal-hardware toy and learning tool. These rules are
+NeuroFlipper is a personal-hardware toy and learning tool. These rules are
 hard constraints — they protect your hardware and your freedom.
 
 ## Radio: RX only, forever

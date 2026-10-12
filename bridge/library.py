@@ -67,7 +67,7 @@ def _safe_repo_path(repo_path: str) -> str:
 
 
 def _get(url: str, timeout: int = 30) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": "flipper-brain/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "neuroflipper/1.0"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         if resp.status != 200:
             raise LibraryError(f"HTTP {resp.status} for {url}")

@@ -1,4 +1,4 @@
-# Flipper Brain configuration. Copy to config.yaml and edit.
+# NeuroFlipper configuration. Copy to config.yaml and edit.
 # Run:  python -m bridge.server --config config.yaml
 
 serial:

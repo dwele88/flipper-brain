@@ -1,4 +1,4 @@
-# 🧠 Flipper Brain
+# 🧠 NeuroFlipper
 
 **The first Flipper Zero AI with moods, senses, and a mind of its own — 1st of its kind.**
 
@@ -27,7 +27,7 @@ real device state, remembers what it did, and tells you what it's thinking.
 ## Quickstart
 
 ```bash
-git clone <this-repo> && cd flipper-brain
+git clone <this-repo> && cd neuroflipper
 pip install -r requirements.txt
 cp config.yaml.example config.yaml   # set your serial port
 python -m bridge.server              # open http://127.0.0.1:8787
@@ -69,6 +69,6 @@ MIT — your hardware, your toy. See [SAFETY](docs/SAFETY.md) before exploring.
 
 ## Support
 
-Free and open source. If Flipper Brain made your Flipper a little more alive,
+Free and open source. If NeuroFlipper made your Flipper a little more alive,
 tips are welcome — [SUPPORT.md](SUPPORT.md). BiMPay (Barbados) preferred 🇧🇧,
 BTC / ETH / SOL also accepted.

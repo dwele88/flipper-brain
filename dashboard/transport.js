@@ -1,4 +1,4 @@
-/* Flipper Brain — transport-agnostic FlipperConnection.
+/* NeuroFlipper — transport-agnostic FlipperConnection.
  *
  * Three transports, one interface:
  *   - BridgeTransport    : HTTP to the local Python bridge (desktop default).

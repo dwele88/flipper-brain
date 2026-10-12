@@ -1,5 +1,5 @@
 # 100 AI-Powered Flipper Zero App Ideas
-*For Dwele's Flipper Brain project — generated 2026-10-12. 70 by Sascha, 18 with Venom (OpenClaw), 12 wildcards. Every idea respects real Flipper Zero hardware (STM32WB55, 128x64 screen, ~256KB RAM). AI runs on-device (tinyML), phone-assisted (phone does the heavy compute over Bluetooth), or cloud-assisted (phone relays). Radio ideas are RX-only: no jamming, no replay, no rolling-code cracking. ★ = top 10.*
+*For Dwele's NeuroFlipper project — generated 2026-10-12. 70 by Sascha, 18 with Venom (OpenClaw), 12 wildcards. Every idea respects real Flipper Zero hardware (STM32WB55, 128x64 screen, ~256KB RAM). AI runs on-device (tinyML), phone-assisted (phone does the heavy compute over Bluetooth), or cloud-assisted (phone relays). Radio ideas are RX-only: no jamming, no replay, no rolling-code cracking. ★ = top 10.*
 
 ## Sub-GHz Signal Intelligence (13)
 

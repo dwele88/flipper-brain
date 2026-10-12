@@ -1,1 +1,1 @@
-# flipper-brain bridge package
+# neuroflipper bridge package

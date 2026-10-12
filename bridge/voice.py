@@ -1,4 +1,4 @@
-"""Voice command matching for Flipper Brain — no LLM, no new installs.
+"""Voice command matching for NeuroFlipper — no LLM, no new installs.
 
 Matches a transcript against command patterns and returns
 {"reply": str, "action": {...}}. The reply is written in the brain's

@@ -1,4 +1,4 @@
-"""Flipper Brain bridge: HTTP API between the Flipper Zero (USB serial CLI)
+"""NeuroFlipper bridge: HTTP API between the Flipper Zero (USB serial CLI)
 and the dashboard / playground. Serves the dashboard static files too.
 
 Run:  python -m bridge.server [--config config.yaml]
@@ -508,14 +508,14 @@ def create_app(config: dict) -> Flask:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Flipper Brain bridge")
+    parser = argparse.ArgumentParser(description="NeuroFlipper bridge")
     parser.add_argument("--config", default=os.path.join(REPO_ROOT, "config.yaml"),
                         help="path to config.yaml")
     args = parser.parse_args()
     config = load_config(args.config)
     app = create_app(config)
     host, port = config["server"]["host"], int(config["server"]["port"])
-    print(f"Flipper Brain bridge on http://{host}:{port} "
+    print(f"NeuroFlipper bridge on http://{host}:{port} "
           f"(serial: {config['serial']['port']})")
     # threaded=True so SSE + API can coexist
     app.run(host=host, port=port, threaded=True, use_reloader=False)

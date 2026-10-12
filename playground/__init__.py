@@ -1,1 +1,1 @@
-# flipper-brain playground package — the "little brain"
+# neuroflipper playground package — the "little brain"

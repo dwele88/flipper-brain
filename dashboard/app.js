@@ -1,4 +1,4 @@
-/* Flipper Brain dashboard — plain JS, no libraries.
+/* NeuroFlipper dashboard — plain JS, no libraries.
  * All Flipper commands go through FlipperConnection (transport.js).
  * Playground + Library are bridge-server features; they enable only when
  * the active transport is the Bridge. Terminal / Device / Files / Apps

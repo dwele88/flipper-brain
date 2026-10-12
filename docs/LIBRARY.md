@@ -1,6 +1,6 @@
 # Library — UberGuidoZ/Flipper file collection
 
-Flipper Brain can browse and install files from
+NeuroFlipper can browse and install files from
 [UberGuidoZ/Flipper](https://github.com/UberGuidoZ/Flipper) (17k+ stars),
 the community-standard all-in-one Flipper Zero file collection: apps,
 BadUSB payloads, IR remotes, SubGHz captures, NFC/RFID dumps, music, and more.
