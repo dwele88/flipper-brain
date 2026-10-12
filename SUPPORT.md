@@ -1,6 +1,6 @@
-# Supporting NeuroFlipper
+# Supporting Flipper Zero Neuro Cortex Brain
 
-NeuroFlipper is free and open source. If it made your Flipper a little more
+Flipper Zero Neuro Cortex Brain is free and open source. If it made your Flipper a little more
 alive, a tip is appreciated — it goes toward hardware for testing and
 keeping the project maintained.
 

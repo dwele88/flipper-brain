@@ -1,4 +1,4 @@
-# NeuroFlipper — Stress Test Report
+# Flipper Zero Neuro Cortex Brain — Stress Test Report
 
 **Date:** 2026-10-12
 **Scope:** software-only (no Flipper hardware attached — serial layer mocked with a faithful Flipper CLI emulator)

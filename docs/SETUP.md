@@ -74,7 +74,7 @@ Find your port:
 
 ```bash
 python -m bridge.server
-# → NeuroFlipper bridge on http://127.0.0.1:8787
+# → Flipper Zero Neuro Cortex Brain bridge on http://127.0.0.1:8787
 ```
 
 Open that URL. The lil brain does its intro, then:

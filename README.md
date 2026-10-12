@@ -1,6 +1,20 @@
-# 🧠 NeuroFlipper
+# 🧠 Flipper Zero Neuro Cortex Brain
 
 **The first Flipper Zero AI with moods, senses, and a mind of its own — 1st of its kind.**
+
+![Neuro Cortex hero](docs/assets/hero.webp)
+
+## What it can do
+
+- 🧠 **A living personality** — 5 moods (😈 Gremlin · 🔭 Explorer · 🎧 DJ · 👻 Ghost · 🎲 Surprise Me) that change how it behaves and talks
+- 👀 **Eyes** — your phone's camera becomes its vision: brightness, motion, zone maps, scene recognition ("I've seen this place before")
+- 👂 **Ears** — your phone's mic becomes its hearing: loudness + pitch bands, learns noise patterns by hour, remembers the loudest thing it ever heard
+- 🗣️ **Voice** — hold-to-talk commands with spoken replies in its own personality
+- 🎮 **Phone remote** — D-pad + brain controls from your phone (honest about hardware limits: no fake button presses)
+- 🔁 **Autonomous Playground** — sense → decide → act loop that runs on its own, with battery/quiet-hours/cooldown interlocks
+- 🧰 **Full control stack** — USB serial bridge + HTTP API + web dashboard (terminal, files, apps, UberGuidoZ library on demand)
+
+![Dashboard](docs/assets/dashboard.png)
 
 Your Flipper Zero, with a mind of its own. A Python bridge lets an AI (or you)
 operate the Flipper over USB serial, a web dashboard gives you manual control,
@@ -69,6 +83,6 @@ MIT — your hardware, your toy. See [SAFETY](docs/SAFETY.md) before exploring.
 
 ## Support
 
-Free and open source. If NeuroFlipper made your Flipper a little more alive,
+Free and open source. If Flipper Zero Neuro Cortex Brain made your Flipper a little more alive,
 tips are welcome — [SUPPORT.md](SUPPORT.md). BiMPay (Barbados) preferred 🇧🇧,
 BTC / ETH / SOL also accepted.
