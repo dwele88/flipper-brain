@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+*.log
+playground/memory.json
+bridge/cache/

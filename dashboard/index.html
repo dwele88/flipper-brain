@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flipper Brain</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="intro">
+  <div class="title">FLIPPER<span class="dot">·</span>BRAIN</div>
+  <div class="stage" id="intro-stage">
+    <!-- mascot lives here during the intro, then moves to the dock -->
+    <svg class="brain" id="mascot" viewBox="0 0 120 120" aria-label="lil brain mascot">
+      <g class="float">
+        <ellipse class="body" cx="60" cy="68" rx="42" ry="38"/>
+        <g class="gyri">
+          <path d="M38 52 q10 -8 20 -2 q10 6 20 0"/>
+          <path d="M34 68 q12 -6 24 0 q12 6 24 0"/>
+          <path d="M42 84 q9 -6 18 0 q9 6 18 -2"/>
+        </g>
+        <g class="acc acc-phones">
+          <path class="phones" d="M28 52 a32 30 0 0 1 64 0"/>
+          <rect class="phonepad" x="20" y="48" width="12" height="20" rx="6"/>
+          <rect class="phonepad" x="88" y="48" width="12" height="20" rx="6"/>
+        </g>
+        <g class="acc acc-spyglass">
+          <circle class="spyglass-lens" cx="90" cy="42" r="11"/>
+          <line class="spyglass" x1="82" y1="50" x2="70" y2="62"/>
+        </g>
+        <g class="pupils">
+          <circle class="eye-white" cx="45" cy="60" r="9"/>
+          <circle class="eye-white" cx="75" cy="60" r="9"/>
+          <circle class="pupil" cx="45" cy="61" r="4.5"/>
+          <circle class="pupil" cx="75" cy="61" r="4.5"/>
+        </g>
+        <g class="eye-closed">
+          <line x1="37" y1="60" x2="53" y2="60"/>
+          <line x1="67" y1="60" x2="83" y2="60"/>
+        </g>
+        <path class="mouth mouth-smile" d="M46 88 Q60 97 74 88"/>
+        <path class="mouth mouth-grin" d="M44 86 Q60 104 76 86 Q60 94 44 86"/>
+        <path class="mouth mouth-smirk" d="M48 90 Q66 96 75 85"/>
+        <text class="zzz" x="92" y="22" font-size="14" fill="#8b96ab">z</text>
+        <path class="arm arm-left" d="M20 74 Q10 68 8 58"/>
+        <path class="arm arm-right" d="M100 74 Q110 68 112 58"/>
+      </g>
+    </svg>
+  </div>
+  <p id="intro-caption">waking up…</p>
+  <button id="skip-intro" class="ghost">skip</button>
+</div>
+
+<header>
+  <h1>FLIPPER<span class="dot">·</span>BRAIN</h1>
+  <span id="conn">○ disconnected</span>
+</header>
+
+<nav id="bottomnav" aria-label="sections">
+  <a href="#sec-conn">🔌<span>Link</span></a>
+  <a href="#sec-device">📟<span>Device</span></a>
+  <a href="#sec-term">⌨<span>Term</span></a>
+  <a href="#sec-files">📁<span>Files</span></a>
+  <a href="#sec-apps">🧩<span>Apps</span></a>
+  <a href="#sec-lib">📚<span>Library</span></a>
+  <a href="#sec-pg">🧠<span>Brain</span></a>
+</nav>
+
+<main>
+  <section class="card" id="sec-conn">
+    <h2>Connection</h2>
+    <div class="row transport-row" id="transport-row"></div>
+    <div class="row">
+      <button id="btn-connect">Connect</button>
+      <button id="btn-disconnect" class="ghost" disabled>Disconnect</button>
+    </div>
+    <div id="conn-detail" class="hint">Pick how to reach your Flipper, then Connect.</div>
+  </section>
+
+  <section class="card" id="sec-device">
+    <h2>Device</h2>
+    <div id="dev-info"><div class="kv"><span>status</span><b>…</b></div></div>
+    <div class="row">
+      <button id="btn-info" class="ghost">Refresh info</button>
+      <button id="btn-reboot" class="danger">Reboot</button>
+    </div>
+  </section>
+
+  <section class="card" id="sec-term">
+    <h2>Terminal</h2>
+    <div id="term-out">flipper&gt; type a command, hit send — try "help"&#10;</div>
+    <div class="row">
+      <input type="text" id="term-in" placeholder="info device" autocomplete="off">
+      <button id="btn-term">Send</button>
+    </div>
+  </section>
+
+  <section class="card" id="sec-files">
+    <h2>Files</h2>
+    <div class="row">
+      <input type="text" id="file-path" value="/ext">
+      <button id="btn-ls" class="ghost">List</button>
+    </div>
+    <div id="file-list"></div>
+  </section>
+
+  <section class="card" id="sec-apps">
+    <h2>Apps</h2>
+    <div class="row"><button id="btn-apps" class="ghost">List apps</button></div>
+    <div id="app-list"></div>
+  </section>
+
+  <section class="card" id="sec-lib" style="grid-column: 1 / -1;">
+    <h2>Library — community file collection</h2>
+    <p class="hint bridge-only-hint">Needs the Bridge transport (server-side feature).</p>
+    <div class="row">
+      <select id="lib-cat"></select>
+      <input type="text" id="lib-q" placeholder="search the collection…">
+      <button id="btn-lib-search" class="ghost">Search</button>
+    </div>
+    <div id="lib-list"></div>
+  </section>
+
+  <section class="card" id="sec-pg" style="grid-column: 1 / -1;">
+    <h2>Playground — the lil brain</h2>
+    <p class="hint bridge-only-hint">Needs the Bridge transport (server-side feature).</p>
+    <div id="pg-status">idle</div>
+    <div class="row">
+      <select id="pg-mood"></select>
+      <input type="text" id="pg-interval" value="20" style="max-width:90px" title="seconds between actions">
+      <button id="btn-pg-start">Start</button>
+      <button id="btn-pg-stop" class="danger" disabled>Stop</button>
+    </div>
+    <div class="row"><div id="thoughts"></div></div>
+  </section>
+</main>
+
+<div id="mascot-dock"></div>
+
+<script src="transport.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

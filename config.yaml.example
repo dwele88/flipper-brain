@@ -1,0 +1,32 @@
+# Flipper Brain configuration. Copy to config.yaml and edit.
+# Run:  python -m bridge.server --config config.yaml
+
+serial:
+  # Linux: /dev/ttyACM0   macOS: /dev/tty.usbmodemXXXX   Windows: COM3
+  port: /dev/ttyACM0
+  baud: 230400
+
+server:
+  host: 127.0.0.1
+  port: 8787
+
+playground:
+  default_interval: 20        # seconds between behavior cycles
+  memory_path: ~/.flipper-brain/memory.json
+
+  # Battery interlocks: the brain protects the cell.
+  battery_low_pct: 25         # at/below: low-power behaviors only
+  battery_critical_pct: 12    # at/below: playground stops entirely
+
+  # Quiet hours: only "quiet"-tagged behaviors (no buzzer/vibro/bright LED).
+  quiet_hours:
+    enabled: true
+    start: 23                 # 11 PM
+    end: 7                    # 7 AM
+
+  max_actions_per_hour: 30    # rate limit so the brain can't thrash the device
+
+  # App names come from `loader list` on YOUR device. Empty = those
+  # behaviors skip themselves gracefully.
+  game_allowlist: []          # e.g. ["Snake"]
+  app_tour_allowlist: []      # e.g. ["Sub-GHz", "NFC"]
