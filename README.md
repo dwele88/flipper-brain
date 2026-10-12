@@ -10,6 +10,14 @@ real device state, remembers what it did, and tells you what it's thinking.
   to what the brain is doing
 - **Playground** — autonomous sense → decide → act loop with 5 moods:
   😈 Gremlin · 🔭 Explorer · 🎧 DJ · 👻 Ghost · 🎲 Surprise Me
+- **Eyes & Ears** — the phone's camera and mic become the Flipper's senses:
+  vision (brightness/motion/zone map) and hearing (level + pitch bands) feed
+  the decide loop, moods react, and it *learns* — scene recognition, noise
+  patterns by hour, loudest moments
+- **Voice** — hold-to-talk on the Remote screen; command-pattern matching
+  with personality-voiced talk-back (no LLM — honest about its limits)
+- **Remote** — D-pad + brain controls (mood switch, trigger cycle, speak)
+  from the phone
 - **Library** — browse/install the UberGuidoZ/Flipper file collection
   (apps, IR, SubGHz, NFC…) straight to your Flipper from the dashboard
 - **Safety-first** — RX-only radio, battery interlocks, quiet hours, rate limits
@@ -33,6 +41,8 @@ sleepy when idle.
 - [Architecture](docs/ARCHITECTURE.md) — how the pieces fit
 - [API](docs/API.md) — every bridge endpoint with examples
 - [Playground](docs/PLAYGROUND.md) — moods, autonomy design, writing behaviors
+- [Eyes & Ears](docs/EYES.md) — phone senses, mood reactions, sense learning
+- [Voice](docs/VOICE.md) — talk to the brain, command patterns, limits
 - [Library](docs/LIBRARY.md) — UberGuidoZ collection integration
 - [Safety](docs/SAFETY.md) — the hard rules (RX-only, etc.)
 

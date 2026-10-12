@@ -81,10 +81,30 @@ def extract_protocols(scan_output: str) -> list[str]:
     return found
 
 
+def merge_external(state: dict, external: dict | None) -> dict:
+    """Fold phone senses (vision/hearing) into device state.
+
+    ``external`` is a snapshot of {"vision": {...}|None, "hearing": {...}|None}
+    maintained by the bridge from the dashboard's Eyes/Ears screens.
+    Missing or stale (>10s old) senses are left as None — the engine treats
+    unknown as unknown, never as zero.
+    """
+    import time
+    ext = external or {}
+    for key in ("vision", "hearing"):
+        val = ext.get(key)
+        if isinstance(val, dict) and time.time() - val.get("ts", 0) <= 10:
+            state[key] = {k: v for k, v in val.items() if k != "ts"}
+        else:
+            state[key] = None
+    return state
+
+
 def sense(flipper) -> dict:
     """Query real device state. Never raises — unknown fields stay None."""
     state: dict = {"battery_pct": None, "storage_free": None,
-                   "running_app": None, "uptime": None, "reachable": False}
+                   "running_app": None, "uptime": None, "reachable": False,
+                   "vision": None, "hearing": None}
     try:
         out = flipper.send("info power", timeout=8)
         state["battery_pct"] = parse_battery(out)

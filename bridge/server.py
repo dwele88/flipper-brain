@@ -357,6 +357,153 @@ def create_app(config: dict) -> Flask:
                 _time.sleep(1)
         return Response(gen(), mimetype="text/event-stream")
 
+    # -- eyes (phone camera as the Flipper's vision) --------------------------
+    @app.route("/api/eyes/frame", methods=["POST"])
+    def eyes_frame():
+        import base64
+        import binascii
+        import datetime as _dt
+        from bridge.vision import analyze_frame, scene_signature
+        body = request.get_json(force=True, silent=True) or {}
+        try:
+            w, h = int(body.get("w", 0)), int(body.get("h", 0))
+            px = base64.b64decode(body.get("px", ""), validate=True)
+        except (TypeError, ValueError, binascii.Error):
+            return jsonify({"ok": False, "error": "px must be base64 bytes"}), 400
+        try:
+            prev_raw = eyes_frame._prev
+            prev = prev_raw[0] if prev_raw and prev_raw[1] == (w, h) else None
+            brightness, motion, zones = analyze_frame(px, w, h, prev)
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        eyes_frame._prev = (px, (w, h))
+        signature = scene_signature(
+            brightness, motion, zones, _dt.datetime.now().hour)
+        try:
+            ts = float(body.get("t") or __import__("time").time())
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "t must be a number"}), 400
+        sample = {"ts": ts,
+                  "brightness": brightness, "motion": motion, "zones": zones,
+                  "signature": signature}
+        pg.set_external("vision", sample)
+        return jsonify({"ok": True, **sample})
+    eyes_frame._prev = None  # in-memory only: previous frame for motion
+
+    # -- ears (phone mic as the Flipper's hearing) ----------------------------
+    def _ts(raw, default: float) -> float:
+        try:
+            return float(raw if raw is not None else default)
+        except (TypeError, ValueError):
+            raise ValueError("t must be a number")
+
+    @app.route("/api/ears", methods=["POST"])
+    def ears():
+        import time as _time
+        body = request.get_json(force=True, silent=True) or {}
+
+        def _f(key: str) -> float:
+            try:
+                return max(0.0, min(1.0, float(body.get(key, 0.0))))
+            except (TypeError, ValueError):
+                return 0.0
+
+        try:
+            ts = _ts(body.get("t"), _time.time())
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        sample = {"ts": ts,
+                  "level": _f("level"), "bass": _f("bass"),
+                  "mid": _f("mid"), "treble": _f("treble")}
+        pg.set_external("hearing", sample)
+        return jsonify({"ok": True, **sample})
+
+    # -- voice (talk to the brain) --------------------------------------------
+    @app.route("/api/voice", methods=["POST"])
+    def voice():
+        from bridge import voice as voice_mod
+        from playground.sense import parse_battery
+        body = request.get_json(force=True, silent=True) or {}
+        text = (body.get("text") or "").strip()
+        if not text:
+            return jsonify({"ok": False, "error": "text is required"}), 400
+        ext = pg.external_snapshot()
+        battery = None
+        reachable = False
+        try:
+            battery = parse_battery(flipper.send("info power", timeout=5))
+            reachable = True
+        except FlipperError:
+            pass
+
+        def _lib_search(q: str):
+            from bridge import library as lib
+            return lib.search(q)
+
+        ctx = {"mood": pg.status().get("mood"), "vision": ext["vision"],
+               "hearing": ext["hearing"], "battery": battery,
+               "reachable": reachable, "library_search": _lib_search}
+        try:
+            result = voice_mod.interpret(text, ctx)
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"voice failed: {exc}"}), 500
+        action = result.get("action") or {}
+        atype = action.get("type")
+        try:
+            if atype == "mood":
+                pg.set_mood(action["mood"])
+            elif atype == "trigger":
+                pg.trigger()
+            elif atype == "stop":
+                pg.stop()
+        except (ValueError, RuntimeError, KeyError) as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        # The user engaged — tag recent loud moments in hearing memory.
+        try:
+            pg.hearing_memory.note_engagement()
+        except Exception:
+            pass
+        return jsonify({"ok": True, "reply": result["reply"],
+                        "action": action or None})
+
+    # -- raw input injection (UNVERIFIED — honest 501) -------------------------
+    @app.route("/api/input", methods=["POST"])
+    def raw_input():
+        # The stock Flipper CLI exposes no documented button-press command
+        # (no `input` command exists on stock/Momentum/Unleashed as of 2026).
+        # Faking success would lie to the dashboard, so this stays 501 until
+        # someone verifies a real injection path on actual hardware.
+        body = request.get_json(force=True, silent=True) or {}
+        key = (body.get("key") or "").strip()
+        if key not in ("up", "down", "left", "right", "ok", "back"):
+            return jsonify({"ok": False,
+                            "error": "key must be one of up/down/left/right/ok/back"}), 400
+        return jsonify({
+            "ok": False,
+            "error": "input injection unverified on this firmware — the stock "
+                     "Flipper CLI has no button-press command. Not faked.",
+        }), 501
+
+    # -- brain remote control (always works — no Flipper needed) ---------------
+    @app.route("/api/brain", methods=["POST"])
+    def brain():
+        body = request.get_json(force=True, silent=True) or {}
+        action = (body.get("action") or "").strip()
+        try:
+            if action == "mood":
+                mood = (body.get("mood") or "").strip()
+                return jsonify({"ok": True, "status": pg.set_mood(mood)})
+            if action == "trigger":
+                return jsonify({"ok": True, "status": pg.trigger()})
+            if action == "speak":
+                text = (body.get("text") or "").strip()
+                pg.speak(text, body.get("event") or "happy")
+                return jsonify({"ok": True})
+            return jsonify({"ok": False,
+                            "error": "action must be mood|trigger|speak"}), 400
+        except (ValueError, RuntimeError) as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+
     return app
 
 

@@ -225,3 +225,19 @@ pre { font-size: 13px; white-space: pre-wrap; word-break: break-word; margin: 8p
   #mascot-dock { right: 14px; bottom: 14px; width: 92px; height: 92px; }
   .frow button, .arow button { padding: 4px 10px; font-size: 12px; min-height: 0; }
 }
+
+/* ---------- eyes / remote ---------- */
+.dpad { display: grid; grid-template-columns: repeat(3, 84px); gap: 8px;
+  justify-content: center; margin: 12px 0; }
+.dpad button { min-height: 64px; font-size: 22px; }
+.meter { flex: 1; min-width: 90px; }
+.meter span { font-size: 11px; text-transform: uppercase; opacity: .7; }
+.meter .bar { height: 10px; background: var(--panel2); border-radius: 5px;
+  overflow: hidden; margin-top: 4px; }
+.meter .bar i { display: block; height: 100%; width: 0%;
+  background: var(--acc); transition: width .3s; }
+.zones { display: grid; grid-template-columns: repeat(3, 40px); gap: 4px;
+  margin-top: 10px; }
+.zones i { width: 40px; height: 30px; border-radius: 4px; background: #000;
+  border: 1px solid var(--line); }
+#eyes-video { width: 120px; border-radius: 8px; border: 1px solid var(--line); }

@@ -20,7 +20,10 @@ from collections import deque
 
 from playground.memory import Memory, DEFAULT_PATH
 from playground.moods import MOODS
-from playground.sense import sense
+from playground.sense import sense, merge_external
+from playground.sense_memory import (VisionMemory, HearingMemory,
+                                      DEFAULT_VISION_PATH,
+                                      DEFAULT_HEARING_PATH)
 
 
 class Playground:
@@ -28,6 +31,17 @@ class Playground:
         self.flipper = flipper
         self.cfg = cfg or {}
         self.memory = Memory(self.cfg.get("memory_path", DEFAULT_PATH))
+        self.vision_memory = VisionMemory(
+            self.cfg.get("vision_memory_path", DEFAULT_VISION_PATH))
+        self.hearing_memory = HearingMemory(
+            self.cfg.get("hearing_memory_path", DEFAULT_HEARING_PATH))
+        # Phone senses, written by the bridge (dashboard Eyes/Ears screens).
+        self._external = {"vision": None, "hearing": None}
+        self._ext_lock = threading.Lock()
+        self._motion_hist = deque(maxlen=10)
+        self._level_hist = deque(maxlen=12)
+        self._last_loud_thought = 0.0
+        self._wake = threading.Event()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._lock = threading.Lock()
@@ -50,12 +64,14 @@ class Playground:
         # Clamp: at least 5s, at most a day (huge values overflow Event.wait).
         self._interval = min(86400, max(5, int(interval)))
         self._stop.clear()
+        self._wake.clear()
         self._thread = threading.Thread(target=self._loop, name="playground",
                                         args=(self._gen,), daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
         self._stop.set()
+        self._wake.set()  # wake a sleeping loop so it exits promptly
         t, self._thread = self._thread, None
         if t and t.is_alive():
             t.join(timeout=8)
@@ -77,6 +93,47 @@ class Playground:
         return {k: {"label": v["label"], "emoji": v["emoji"],
                     "description": v["description"]}
                 for k, v in MOODS.items()}
+
+    # -- phone senses + remote brain control -------------------------------
+
+    def set_external(self, kind: str, data: dict | None) -> None:
+        """Bridge writes the latest vision/hearing sample here."""
+        if kind not in ("vision", "hearing"):
+            raise ValueError("kind must be 'vision' or 'hearing'")
+        with self._ext_lock:
+            self._external[kind] = data
+
+    def external_snapshot(self) -> dict:
+        with self._ext_lock:
+            return {"vision": self._external["vision"],
+                    "hearing": self._external["hearing"]}
+
+    def set_mood(self, mood: str) -> dict:
+        """Switch mood now; starts the loop if it wasn't running."""
+        if mood not in MOODS:
+            raise ValueError(f"unknown mood {mood!r}; choose from {sorted(MOODS)}")
+        interval = self._interval if self.status()["running"] else 20
+        self.start(mood, interval)
+        self._think(f"switching to {MOODS[mood]['label']} mode — your call, boss.",
+                    "curious")
+        return self.status()
+
+    def trigger(self) -> dict:
+        """Wake the loop for one immediate sense→decide→act cycle."""
+        if not self.status()["running"]:
+            raise RuntimeError("playground is not running — start it first")
+        self._wake.set()
+        return self.status()
+
+    def speak(self, text: str, event: str | None = "happy") -> dict:
+        """Push a brain-voiced line into the thought log (mascot reacts)."""
+        text = (text or "").strip()
+        if not text:
+            raise ValueError("text is required")
+        if len(text) > 500:
+            text = text[:500]
+        self._think(text, event)
+        return {"ok": True}
 
     # -- thoughts ----------------------------------------------------------
 
@@ -116,6 +173,63 @@ class Playground:
         if start <= end:
             return start <= hour < end
         return hour >= start or hour < end
+
+    def _sense_hint(self, state: dict):
+        """Vision/hearing → (hinted_mood|None, notes).
+
+        The brain never overrides the user's chosen mood — hints only add
+        honest notes, EXCEPT in blend ("surprise") mode where the hint
+        weights which mood's behaviors get sampled. All thresholds are
+        heuristics, documented in docs/EYES.md.
+        """
+        hint = None
+        notes: list[str] = []
+        v = state.get("vision")
+        h = state.get("hearing")
+        if v:
+            b = float(v.get("brightness", 0.5))
+            mo = float(v.get("motion", 0.0))
+            self._motion_hist.append(mo)
+            avg_mo = sum(self._motion_hist) / len(self._motion_hist)
+            if b < 0.15:
+                hint = "ghost"
+                notes.append("it's dark in here — feeling ghostly")
+            elif len(self._motion_hist) >= 3 and avg_mo > 0.45:
+                hint = "explorer"
+                notes.append("lots of movement — explorer instincts kicking in")
+            elif b > 0.6 and mo > 0.35:
+                hint = "dj"
+                notes.append("bright and lively in here — dj energy")
+            rec = v.get("recognition") or {}
+            if rec.get("recognized"):
+                notes.append(f"wait, I know this place — seen it {rec['visits']} times")
+        if h:
+            lvl = float(h.get("level", 0.0))
+            bass = float(h.get("bass", 0.0))
+            self._level_hist.append(lvl)
+            if lvl > 0.7:
+                if hint is None:
+                    hint = "surprise"
+                notes.append("WOAH, that was loud!")
+            elif lvl > 0.3 and bass > 0.45 and self._is_pulsing():
+                if hint is None:
+                    hint = "dj"
+                notes.append("is that… music? definitely dj time")
+            elif lvl < 0.08:
+                if hint is None:
+                    hint = "ghost"
+                notes.append("so quiet… ghost mode feels right")
+        return hint, notes
+
+    def _is_pulsing(self) -> bool:
+        """Heuristic for music-like rhythmic sound: mid-level audio with
+        high variance (alternating louder/quieter beats), not just noise."""
+        if len(self._level_hist) < 6:
+            return False
+        vals = list(self._level_hist)
+        mean = sum(vals) / len(vals)
+        var = sum((x - mean) ** 2 for x in vals) / len(vals)
+        return 0.15 < mean < 0.7 and var > 0.02
 
     def _decide(self, state: dict):
         """Returns (behavior_dict, decision_notes). Notes feed the thought."""
@@ -184,7 +298,15 @@ class Playground:
                 cands = non_repeat
 
         # Preference-weighted choice (learned from real run history).
+        # In blend mode, a vision/hearing hint tilts sampling toward the
+        # hinted mood's behaviors. Fixed moods keep the user's choice.
         weights = [self.memory.preference_score(b["name"]) for _, b in cands]
+        hint, sense_notes = self._sense_hint(state)
+        notes.extend(sense_notes)
+        if MOODS[mood_key].get("blend") and hint:
+            weights = [w * (3.0 if m == hint else 1.0)
+                       for (m, b), w in zip(cands, weights)]
+            notes.append(f"senses say '{hint}' — leaning that way")
         choice = random.choices(cands, weights=weights, k=1)[0]
         top = max(weights)
         if weights[cands.index(choice)] >= top and len(cands) > 1:
@@ -208,6 +330,44 @@ class Playground:
                          f"{Memory.ago(self.memory.last_run(last))}.")
         return " ".join(parts)
 
+    def _rest(self) -> None:
+        """Sleep until the next cycle, a trigger(), or stop()."""
+        self._wake.wait(self._interval)
+        self._wake.clear()
+
+    def _learn_senses(self, state: dict) -> None:
+        """Fold fresh vision/hearing into persistent sense memory.
+
+        Stale samples (older than two cycles — e.g. a closed Eyes tab) are
+        never learned: without this the brain would keep re-recording the
+        same dead signature and inflate its own memories.
+        """
+        now = time.time()
+        fresh = 2 * self._interval
+        v = state.get("vision")
+        if v and v.get("signature"):
+            if now - float(v.get("ts", 0)) > fresh:
+                v["stale"] = True
+            else:
+                rec = self.vision_memory.record(v["signature"], self._mood)
+                v["recognition"] = rec
+                if self.vision_memory.should_notice(v["signature"]):
+                    self._think(
+                        f"hey — I've seen this place {rec['visits']} times now. "
+                        "I remember it.", "curious")
+        h = state.get("hearing")
+        if h and now - float(h.get("ts", 0)) <= fresh:
+            res = self.hearing_memory.record(
+                float(h.get("level", 0.0)), float(h.get("bass", 0.0)),
+                float(h.get("mid", 0.0)), float(h.get("treble", 0.0)))
+            if (res["is_record_loud"]
+                    and now - self._last_loud_thought > 300):
+                self._last_loud_thought = now
+                self._think("that was the LOUDEST thing I've ever heard! "
+                            "logging it for posterity.", "curious")
+        elif h:
+            h["stale"] = True
+
     def _loop(self, gen: int) -> None:
         assert self._mood is not None
         mood_key = self._mood
@@ -216,11 +376,13 @@ class Playground:
         # started, this stale thread exits instead of driving the flipper.
         while not self._stop.is_set() and gen == self._gen:
             self._cycle += 1
-            state = sense(self.flipper)
+            state = merge_external(sense(self.flipper),
+                                   self.external_snapshot())
+            self._learn_senses(state)
             if not state.get("reachable"):
                 self._think("Can't reach the Flipper over serial — retrying next cycle.",
                             None)
-                self._stop.wait(self._interval)
+                self._rest()
                 continue
             choice, notes = self._decide(state)
             if choice is None:
@@ -228,7 +390,7 @@ class Playground:
                 self._think(" ".join(notes) + ".", "sleepy")
                 if "critical" in " ".join(notes):
                     break
-                self._stop.wait(self._interval)
+                self._rest()
                 continue
             src_mood, behavior = choice
             ctx = {"state": state, "memory": self.memory, "config": self.cfg}
@@ -248,5 +410,5 @@ class Playground:
                                         investigated=bool(extra.get("investigated")))
             thought = self._compose_thought(mood_key, behavior, result, state, notes)
             self._think(thought, result.get("event"))
-            self._stop.wait(self._interval)
+            self._rest()
         self._think("Going to sleep…", "sleepy")

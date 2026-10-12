@@ -64,6 +64,8 @@
   <a href="#sec-files">📁<span>Files</span></a>
   <a href="#sec-apps">🧩<span>Apps</span></a>
   <a href="#sec-lib">📚<span>Library</span></a>
+  <a href="#sec-eyes">👁<span>Eyes</span></a>
+  <a href="#sec-remote">🤖<span>Remote</span></a>
   <a href="#sec-pg">🧠<span>Brain</span></a>
 </nav>
 
@@ -120,6 +122,52 @@
       <button id="btn-lib-search" class="ghost">Search</button>
     </div>
     <div id="lib-list"></div>
+  </section>
+
+  <section class="card" id="sec-eyes" style="grid-column: 1 / -1;">
+    <h2>Eyes &amp; Ears — phone senses</h2>
+    <p class="hint bridge-only-hint">Needs the Bridge transport (server-side feature).</p>
+    <div class="row">
+      <button id="btn-eyes">👁 Enable eyes</button>
+      <button id="btn-ears" class="ghost">👂 Enable ears</button>
+    </div>
+    <div class="row">
+      <video id="eyes-video" playsinline muted style="display:none"></video>
+      <canvas id="eyes-canvas" width="48" height="36" style="display:none"></canvas>
+    </div>
+    <div id="eyes-status" class="hint">Eyes off. The brain can't see until you enable them.</div>
+    <div class="row">
+      <div class="meter"><span>brightness</span><div class="bar"><i id="m-bright"></i></div></div>
+      <div class="meter"><span>motion</span><div class="bar"><i id="m-motion"></i></div></div>
+      <div class="meter"><span>volume</span><div class="bar"><i id="m-level"></i></div></div>
+    </div>
+    <div id="eyes-zones" class="zones" aria-hidden="true"></div>
+    <div id="eyes-note" class="hint"></div>
+  </section>
+
+  <section class="card" id="sec-remote" style="grid-column: 1 / -1;">
+    <h2>Remote — drive the brain</h2>
+    <p class="hint bridge-only-hint">Needs the Bridge transport (server-side feature).</p>
+    <div class="dpad">
+      <span></span><button data-key="up" class="ghost">▲</button><span></span>
+      <button data-key="left" class="ghost">◀</button><button data-key="ok" class="ghost">OK</button><button data-key="right" class="ghost">▶</button>
+      <span></span><button data-key="down" class="ghost">▼</button><button data-key="back" class="ghost">⏎</button>
+    </div>
+    <div id="remote-note" class="hint">Raw Flipper button-press injection is <b>unverified</b> on stock firmware — the D-pad will tell you honestly if it can't.</div>
+    <div class="row">
+      <select id="brain-mood"></select>
+      <button id="btn-brain-mood" class="ghost">Set mood</button>
+      <button id="btn-brain-trigger">⚡ Do something now</button>
+    </div>
+    <div class="row">
+      <input type="text" id="brain-say" placeholder="make the brain say…" autocomplete="off">
+      <button id="btn-brain-say" class="ghost">Say it</button>
+    </div>
+    <div class="row">
+      <button id="btn-voice">🎙 Hold to talk</button>
+      <button id="btn-mute" class="ghost">🔊 voice on</button>
+    </div>
+    <div id="voice-status" class="hint">Voice: tap-and-hold the mic, speak, release. Chrome/Android only.</div>
   </section>
 
   <section class="card" id="sec-pg" style="grid-column: 1 / -1;">

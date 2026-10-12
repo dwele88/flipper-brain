@@ -108,3 +108,27 @@ curl -X POST localhost:8787/api/playground/start -H 'Content-Type: application/j
   -d '{"mood":"explorer","interval":30}'
 curl localhost:8787/api/playground/thoughts?since=0
 ```
+
+## Eyes & Ears (phone senses)
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/eyes/frame` | `{t, w, h, px}` — base64 grayscale bytes, `len == w*h` | `{brightness, motion, zones[9], signature}` — brightness/motion 0..1, 3×3 zone map |
+| POST | `/api/ears` | `{t, level, bass, mid, treble}` — all 0..1 | `{level, bass, mid, treble}` echoed |
+
+Frames are ~48×36 grayscale at ~1/sec from the dashboard. The bridge keeps
+only the previous frame in memory (for motion); persistent learning lives in
+`playground/vision_memory.json` and `playground/hearing_memory.json`. Samples
+older than 10s are treated as unknown. See [EYES.md](EYES.md).
+
+## Voice & remote brain control
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/api/voice` | `{text}` | `{reply, action}` — personality-voiced reply + optional action (`mood`/`trigger`/`stop`/`library_results`) |
+| POST | `/api/brain` | `{action: "mood", mood}` | switches playground mood (starts it if idle) |
+| POST | `/api/brain` | `{action: "trigger"}` | one immediate sense→decide→act cycle |
+| POST | `/api/brain` | `{action: "speak", text, event?}` | pushes a line to the thought log (mascot reacts) |
+| POST | `/api/input` | `{key: up\|down\|left\|right\|ok\|back}` | **501** — input injection is unverified on stock firmware; never faked |
+
+Voice is command-pattern matching, not freeform chat — see [VOICE.md](VOICE.md).

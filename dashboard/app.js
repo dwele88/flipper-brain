@@ -202,6 +202,8 @@ async function loadMoods() {
     o.textContent = `${m.emoji} ${m.label} — ${m.description.slice(0, 60)}…`;
     o.title = m.description;
     sel.appendChild(o);
+    const o2 = o.cloneNode(true);
+    $("brain-mood").appendChild(o2);
   }
 }
 $("btn-pg-start").onclick = async () => {
@@ -336,6 +338,241 @@ async function libSearch() {
 $("lib-cat").addEventListener("change", libBrowse);
 $("btn-lib-search").onclick = libSearch;
 $("lib-q").addEventListener("keydown", (e) => { if (e.key === "Enter") libSearch(); });
+
+/* ---------------- eyes + ears (bridge only) ---------------- */
+let eyesStream = null, eyesTimer = null, earsStream = null, earsTimer = null;
+let earsCtx = null, earsAnalyser = null;
+const eyesVideo = $("eyes-video"), eyesCanvas = $("eyes-canvas");
+const ectx = eyesCanvas.getContext("2d", { willReadFrequently: true });
+
+function gray48x36() {
+  ectx.drawImage(eyesVideo, 0, 0, 48, 36);
+  const d = ectx.getImageData(0, 0, 48, 36).data;
+  const px = new Uint8Array(48 * 36);
+  for (let i = 0; i < px.length; i++)
+    px[i] = (d[i*4]*0.299 + d[i*4+1]*0.587 + d[i*4+2]*0.114) | 0;
+  return px;
+}
+function b64(bytes) {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 8192)
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+  return btoa(s);
+}
+async function captureEyeFrame() {
+  if (eyesVideo.readyState < 2) return;
+  try {
+    const r = await api("/api/eyes/frame", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ t: Date.now() / 1000, w: 48, h: 36,
+                             px: b64(gray48x36()) }),
+    });
+    if (!r.ok) return;
+    $("m-bright").style.width = (r.brightness * 100) + "%";
+    $("m-motion").style.width = (r.motion * 100) + "%";
+    const z = $("eyes-zones");
+    if (!z.children.length)
+      for (let i = 0; i < 9; i++) z.appendChild(document.createElement("i"));
+    r.zones.forEach((v, i) => {
+      const g = Math.round(v * 255);
+      z.children[i].style.background = `rgb(${g},${g},${g})`;
+    });
+    const dark = r.brightness < 0.15 ? "dark" : r.brightness > 0.75 ? "bright" : "dim";
+    $("eyes-status").textContent =
+      `👁 seeing — ${dark}, motion ${(r.motion * 100) | 0}%`;
+  } catch (e) { /* bridge hiccup; next frame retries */ }
+}
+$("btn-eyes").onclick = async () => {
+  if (eyesStream) {
+    clearInterval(eyesTimer); eyesTimer = null;
+    eyesStream.getTracks().forEach((t) => t.stop()); eyesStream = null;
+    eyesVideo.style.display = "none";
+    $("btn-eyes").textContent = "👁 Enable eyes";
+    $("eyes-status").textContent = "Eyes off. The brain can't see until you enable them.";
+    return;
+  }
+  if (!bridgeActive()) { alert("Eyes need the Bridge transport."); return; }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    $("eyes-status").textContent = "Camera not available in this browser.";
+    return;
+  }
+  try {
+    eyesStream = await navigator.mediaDevices.getUserMedia(
+      { video: { facingMode: "environment", width: 320 }, audio: false });
+    eyesVideo.srcObject = eyesStream;
+    eyesVideo.play();
+    eyesVideo.style.display = "";
+    $("btn-eyes").textContent = "👁 Disable eyes";
+    eyesTimer = setInterval(captureEyeFrame, 1000);
+    mascotEvent("curious");
+  } catch (e) {
+    $("eyes-status").textContent = "Camera blocked: " + e.message;
+  }
+};
+
+function earsSample() {
+  const n = earsAnalyser.frequencyBinCount;
+  const freq = new Uint8Array(n), td = new Uint8Array(earsAnalyser.fftSize);
+  earsAnalyser.getByteFrequencyData(freq);
+  earsAnalyser.getByteTimeDomainData(td);
+  let sum = 0;
+  for (let i = 0; i < td.length; i++) { const v = (td[i] - 128) / 128; sum += v * v; }
+  const level = Math.min(1, Math.sqrt(sum / td.length) * 3);
+  const band = (a, b) => {
+    let s = 0; for (let i = a; i < b && i < n; i++) s += freq[i];
+    return s / ((b - a) * 255);
+  };
+  return { level, bass: band(1, 8), mid: band(8, 40), treble: band(40, 100) };
+}
+async function captureEarSample() {
+  try {
+    const s = earsSample();
+    $("m-level").style.width = (s.level * 100) + "%";
+    const r = await api("/api/ears", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ t: Date.now() / 1000, ...s }),
+    });
+    if (r.ok && r.level > 0.7)
+      $("eyes-note").textContent = "🔊 loud! the brain noticed.";
+    else if (r.ok && r.level < 0.08)
+      $("eyes-note").textContent = "🤫 quiet…";
+  } catch (e) { /* next second retries */ }
+}
+$("btn-ears").onclick = async () => {
+  if (earsStream) {
+    clearInterval(earsTimer); earsTimer = null;
+    earsStream.getTracks().forEach((t) => t.stop()); earsStream = null;
+    if (earsCtx) { earsCtx.close(); earsCtx = null; }
+    $("btn-ears").textContent = "👂 Enable ears";
+    return;
+  }
+  if (!bridgeActive()) { alert("Ears need the Bridge transport."); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext) {
+    $("eyes-note").textContent = "Microphone/audio not available in this browser.";
+    return;
+  }
+  try {
+    earsStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    earsCtx = new AudioContext();
+    const src = earsCtx.createMediaStreamSource(earsStream);
+    earsAnalyser = earsCtx.createAnalyser();
+    earsAnalyser.fftSize = 256;
+    src.connect(earsAnalyser);
+    $("btn-ears").textContent = "👂 Disable ears";
+    earsTimer = setInterval(captureEarSample, 1000);
+    mascotEvent("curious");
+  } catch (e) {
+    $("eyes-note").textContent = "Microphone blocked: " + e.message;
+  }
+};
+
+/* ---------------- remote: d-pad + brain control + voice ---------------- */
+document.querySelectorAll(".dpad button").forEach((b) => {
+  b.onclick = async () => {
+    if (!bridgeActive()) { alert("Remote needs the Bridge transport."); return; }
+    const r = await api("/api/input", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: b.dataset.key }),
+    });
+    // 501 is the honest answer until a real injection path is verified.
+    $("remote-note").textContent = r.ok ? "sent ✓"
+      : "⚠ " + (r.error || "not available");
+  };
+});
+$("btn-brain-mood").onclick = async () => {
+  if (!bridgeActive()) { alert("Remote needs the Bridge transport."); return; }
+  const mood = $("brain-mood").value;
+  const r = await api("/api/brain", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "mood", mood }),
+  });
+  if (r.ok) { setMascotMood(mood === "surprise" ? null : mood); mascotEvent("happy"); refreshBridgeStatus(); }
+  else alert("Could not switch mood: " + r.error);
+};
+$("btn-brain-trigger").onclick = async () => {
+  if (!bridgeActive()) { alert("Remote needs the Bridge transport."); return; }
+  const r = await api("/api/brain", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "trigger" }),
+  });
+  if (r.ok) mascotEvent("curious");
+  else alert("Trigger failed: " + (r.error || "is the playground running?"));
+};
+async function brainSay() {
+  const text = $("brain-say").value.trim();
+  if (!text || !bridgeActive()) return;
+  $("brain-say").value = "";
+  await api("/api/brain", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "speak", text }),
+  });
+  mascotEvent("happy");
+}
+$("btn-brain-say").onclick = brainSay;
+$("brain-say").addEventListener("keydown", (e) => { if (e.key === "Enter") brainSay(); });
+
+/* voice: push-to-talk in, speechSynthesis out */
+let voiceMuted = false, rec = null, recActive = false;
+$("btn-mute").onclick = () => {
+  voiceMuted = !voiceMuted;
+  $("btn-mute").textContent = voiceMuted ? "🔇 voice off" : "🔊 voice on";
+  if (voiceMuted) speechSynthesis.cancel();
+};
+function speakReply(text) {
+  if (voiceMuted || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 1.15; u.pitch = 1.3;
+  speechSynthesis.speak(u);
+}
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SR) {
+  $("voice-status").textContent = "Voice input isn't supported in this browser — Chrome/Android only.";
+  $("btn-voice").disabled = true;
+} else {
+  rec = new SR();
+  rec.lang = "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+  rec.onresult = async (ev) => {
+    const text = ev.results[0][0].transcript;
+    $("voice-status").textContent = `you said: "${text}" — thinking…`;
+    try {
+      const r = await api("/api/voice", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (r.ok) {
+        $("voice-status").textContent = `🧠 ${r.reply}`;
+        mascotEvent("happy");
+        speakReply(r.reply);
+      } else {
+        $("voice-status").textContent = "hmm, that didn't work: " + r.error;
+      }
+    } catch (e) { $("voice-status").textContent = "voice error: " + e.message; }
+    recActive = false;
+    $("btn-voice").textContent = "🎙 Hold to talk";
+  };
+  rec.onend = () => {
+    if (recActive) { recActive = false; $("btn-voice").textContent = "🎙 Hold to talk"; }
+  };
+  rec.onerror = (ev) => {
+    $("voice-status").textContent = "mic error: " + ev.error;
+    recActive = false; $("btn-voice").textContent = "🎙 Hold to talk";
+  };
+  const vbtn = $("btn-voice");
+  const startRec = (e) => {
+    e.preventDefault();
+    if (!bridgeActive()) { alert("Voice needs the Bridge transport."); return; }
+    if (recActive) return;
+    recActive = true;
+    vbtn.textContent = "🎙 Listening… release";
+    $("voice-status").textContent = "listening…";
+    try { rec.start(); } catch (err) { recActive = false; }
+  };
+  const stopRec = () => { if (recActive) { try { rec.stop(); } catch (e) {} } };
+  vbtn.addEventListener("pointerdown", startRec);
+  vbtn.addEventListener("pointerup", stopRec);
+  vbtn.addEventListener("pointerleave", stopRec);
+}
 
 /* Status handler — registered once, after all sections are defined. */
 conn.onStatus((ev) => {
