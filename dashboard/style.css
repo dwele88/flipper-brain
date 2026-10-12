@@ -241,3 +241,18 @@ pre { font-size: 13px; white-space: pre-wrap; word-break: break-word; margin: 8p
 .zones i { width: 40px; height: 30px; border-radius: 4px; background: #000;
   border: 1px solid var(--line); }
 #eyes-video { width: 120px; border-radius: 8px; border: 1px solid var(--line); }
+
+/* panic mode */
+#panic-settings { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+#panic-settings h3 { margin: 0 0 4px; }
+#panic-overlay, #panic-alert { position: fixed; inset: 0; z-index: 60;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; text-align: center; padding: 24px; }
+#panic-overlay { background: rgba(160, 10, 10, 0.94); }
+#panic-alert { background: rgba(20, 20, 26, 0.96); }
+#panic-overlay h2, #panic-alert h2 { color: #fff; margin: 0; font-size: 30px; }
+#panic-count { font-size: 72px; font-weight: 800; color: #fff; }
+#panic-overlay .hint, #panic-alert .hint { color: #ffd9d9; }
+button.panic-big { font-size: 19px; padding: 14px 30px; }
+#panic-overlay button.panic-big { background: #fff; color: #a00; }
+#panic-alert a button { width: 100%; }

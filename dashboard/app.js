@@ -448,6 +448,280 @@ function canFireEvent(lastEventMs, nowMs) {
 }
 /* DETECTORS-END */
 
+/* PANIC-START — pure functions; unit-tested in node, see tests/ */
+
+// If the OS took the page to the background (e.g. SMS composer) and the mic
+// tracks died while away, re-arm ears when the user comes back.
+if (typeof document !== "undefined") {
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  const btn = $("btn-ears");
+  if (!btn || !/disable/i.test(btn.textContent)) return;
+  if (earsStream && earsStream.getTracks().some((t) => t.readyState === "live")) return;
+  try { btn.click(); } catch (e) { /* user re-enables manually */ }
+  setTimeout(() => {
+    try { if (!/disable/i.test(btn.textContent)) btn.click(); }
+    catch (e) { /* user re-enables manually */ }
+  }, 500);
+});
+}
+function panicTrebleRatio(s) {
+  const d = (s.bass || 0) + (s.mid || 0) + (s.treble || 0) + 1e-6;
+  return (s.treble || 0) / d;
+}
+function detectScream(hist) {
+  // hist: [{t, level, tr}] ascending by t. A scream is loud (level > 0.75)
+  // AND treble-dominant (tr > 0.5), sustained continuously for >= 1500ms.
+  // Short claps fail the sustain test; laughter fails the treble test.
+  if (!hist || hist.length < 5) return null;
+  const now = hist[hist.length - 1].t;
+  const win = hist.filter((s) => now - s.t <= 1500);
+  if (win.length < 5 || (now - win[0].t) < 1500) return null;
+  for (const s of win) if (!(s.level > 0.75 && s.tr > 0.5)) return null;
+  return { durMs: now - win[0].t };
+}
+function panicWordRe(word) {
+  const esc = String(word || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp("\\b" + esc + "\\b", "i");
+}
+function panicWordFired(hits, nowMs) {
+  // hits: [ms timestamps] — fires when the panic word lands 2x within 6s.
+  return hits.filter((t) => nowMs - t <= 6000).length >= 2;
+}
+function panicCanArm(earOpenMs, nowMs) {
+  return (nowMs - earOpenMs) > 10000; // ears must be open >10s before arming
+}
+function panicCooldownOk(lastPanicMs, nowMs) {
+  return (nowMs - lastPanicMs) >= 60000; // max 1 panic alert / 60s
+}
+/* 5s cancel countdown as a pure state machine (the UI drives it with timers). */
+function panicMachineNew() { return { state: "idle", endsAt: 0 }; }
+function panicMachineStart(m, nowMs) { m.state = "countdown"; m.endsAt = nowMs + 5000; }
+function panicMachineCancel(m) { m.state = "idle"; m.endsAt = 0; }
+function panicMachineExpired(m, nowMs) {
+  return m.state === "countdown" && nowMs >= m.endsAt;
+}
+/* PANIC-END */
+
+/* ---------------- panic mode (Ears screen only) ----------------
+ * If the user is in danger (robbery, attack), the phone detects distress
+ * and helps alert their emergency contact. The feature is INERT until an
+ * emergency contact is set. Panic overrides personality: while a panic is
+ * active the brain does not chat — no event POSTs, no spoken reactions.
+ */
+const panic = {
+  contact: "", name: "", word: "help", mode: "silent",
+  machine: panicMachineNew(), active: false, lastMs: 0,
+  earOpenMs: 0, loc: null, wordHits: [], countTimer: null,
+};
+let panicRec = null, panicWatching = false;
+let panicAudioCtx = null, panicAlarmNodes = null;
+
+function panicLoad() {
+  try {
+    panic.contact = localStorage.getItem("panic.contact") || "";
+    panic.name = localStorage.getItem("panic.name") || "";
+    panic.word = localStorage.getItem("panic.word") || "help";
+    panic.mode = localStorage.getItem("panic.mode") || "silent";
+  } catch (e) { /* private mode */ }
+  $("panic-contact").value = panic.contact;
+  $("panic-name").value = panic.name;
+  $("panic-word").value = panic.word;
+  $("panic-mode").value = panic.mode;
+  panicStatus();
+}
+function panicSave() {
+  panic.contact = $("panic-contact").value.trim();
+  panic.name = $("panic-name").value.trim();
+  panic.word = $("panic-word").value.trim() || "help";
+  panic.mode = $("panic-mode").value;
+  try {
+    localStorage.setItem("panic.contact", panic.contact);
+    localStorage.setItem("panic.name", panic.name);
+    localStorage.setItem("panic.word", panic.word);
+    localStorage.setItem("panic.mode", panic.mode);
+  } catch (e) {}
+  panicRecStop();
+  if (earsStream) panicRecStart(); // re-arm word listener with new word
+  panicStatus();
+}
+function panicArmed() { return panic.contact.length > 0; }
+function panicCanTrigger(nowMs) {
+  return panicArmed() && !panic.active &&
+    panic.machine.state === "idle" &&
+    panicCanArm(panic.earOpenMs, nowMs) &&
+    panicCooldownOk(panic.lastMs, nowMs);
+}
+function panicStatus() {
+  const el = $("panic-status");
+  if (!panicArmed()) {
+    el.textContent = "panic off — set an emergency contact to arm it.";
+    return;
+  }
+  el.textContent = earsStream
+    ? `🚨 panic armed — scream, or say "${panic.word}" twice, to trigger (${panic.mode} mode).`
+    : "🚨 panic will arm when you enable ears.";
+}
+
+/* 10Hz tick: scream detection (panic-word arrives via SpeechRecognition). */
+function panicTick(nowMs) {
+  if (!panicCanTrigger(nowMs)) return;
+  if (detectScream(earLevelHist)) startPanicCountdown("scream");
+}
+
+function panicGetLocation(cb) {
+  if (!navigator.geolocation) { cb(null); return; }
+  let done = false;
+  const fin = (loc) => { if (!done) { done = true; cb(loc); } };
+  try {
+    navigator.geolocation.getCurrentPosition(
+      (p) => fin({ lat: p.coords.latitude, lon: p.coords.longitude }),
+      () => fin(null),
+      { timeout: 4000, maximumAge: 60000 });
+    setTimeout(() => fin(null), 4500);
+  } catch (e) { fin(null); }
+}
+
+function startPanicCountdown(reason) {
+  panic.active = true; // panic overrides personality: mute brain chatter
+  panicMachineStart(panic.machine, Date.now());
+  panicGetLocation((loc) => { panic.loc = loc; });
+  $("panic-reason").textContent = reason === "scream"
+    ? "😱 scream detected" : `🆘 panic word "${panic.word}" heard twice`;
+  $("panic-overlay").style.display = "";
+  const tick = () => {
+    const left = Math.max(0,
+      Math.ceil((panic.machine.endsAt - Date.now()) / 1000));
+    $("panic-count").textContent = left;
+    if (panicMachineExpired(panic.machine, Date.now())) firePanicAlert(reason);
+    else panic.countTimer = setTimeout(tick, 250);
+  };
+  tick();
+}
+
+function cancelPanic() {
+  clearTimeout(panic.countTimer); panic.countTimer = null;
+  panicMachineCancel(panic.machine);
+  panic.active = false;
+  $("panic-overlay").style.display = "none";
+  panic.lastMs = Date.now(); // a cancelled scare still cools down
+  $("eyes-note").textContent = "panic cancelled — back to listening.";
+  panicStatus();
+}
+
+function panicBody() {
+  const name = panic.name || "me";
+  const loc = panic.loc
+    ? `https://maps.google.com/?q=${panic.loc.lat.toFixed(5)},${panic.loc.lon.toFixed(5)}`
+    : "location unavailable";
+  return `PANIC ALERT from ${name}: I may be in danger. My location: ${loc}. This was auto-triggered by my Flipper.`;
+}
+
+function firePanicAlert(reason) {
+  clearTimeout(panic.countTimer); panic.countTimer = null;
+  panic.machine.state = "alerted";
+  panic.lastMs = Date.now();
+  $("panic-overlay").style.display = "none";
+  freezeEarClip("panic", Date.now()); // keep the evidence recording
+  const body = panicBody();
+  const digits = panic.contact.replace(/\D/g, "");
+  const smsUrl = `sms:${panic.contact}?body=${encodeURIComponent(body)}`;
+  const waUrl = `https://wa.me/${digits}?text=${encodeURIComponent(body)}`;
+  $("panic-alert-reason").textContent = reason === "scream"
+    ? "😱 scream detected — alert ready"
+    : "🆘 panic word heard — alert ready";
+  $("panic-sms").href = smsUrl;
+  $("panic-wa").href = waUrl;
+  $("panic-alert").style.display = "";
+  // A web page cannot send SMS silently — this opens the messaging app
+  // with the alert pre-filled; the user taps send. Fired through a hidden
+  // iframe so the dashboard page itself is never navigated away (the ears
+  // stream and brain connection stay alive if the user backs out).
+  try {
+    const f = document.createElement("iframe");
+    f.style.display = "none";
+    f.src = smsUrl;
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 5000);
+  } catch (e) { /* buttons are the fallback */ }
+  if (panic.mode === "alarm") panicAlarmStart();
+}
+
+function panicStandDown() {
+  panicAlarmStop();
+  panic.active = false;
+  panic.machine.state = "idle"; panic.machine.endsAt = 0;
+  $("panic-alert").style.display = "none";
+  $("eyes-note").textContent = "stood down — listening again.";
+  panicStatus();
+}
+
+function panicAlarmStart() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  try {
+    if (!panicAudioCtx) panicAudioCtx = new AC();
+    if (panicAudioCtx.state === "suspended") panicAudioCtx.resume();
+    const o = panicAudioCtx.createOscillator();
+    const g = panicAudioCtx.createGain();
+    o.type = "square"; o.frequency.value = 620; g.gain.value = 0.22;
+    o.connect(g); g.connect(panicAudioCtx.destination); o.start();
+    let hi = false;
+    const flip = setInterval(() => {
+      hi = !hi;
+      o.frequency.setValueAtTime(hi ? 880 : 620, panicAudioCtx.currentTime);
+    }, 350);
+    panicAlarmNodes = { o: o, flip: flip };
+  } catch (e) { /* audio unavailable */ }
+}
+function panicAlarmStop() {
+  if (!panicAlarmNodes) return;
+  try { clearInterval(panicAlarmNodes.flip); panicAlarmNodes.o.stop(); }
+  catch (e) {}
+  panicAlarmNodes = null;
+}
+
+/* Continuous panic-word listener (separate from hold-to-talk voice). */
+function panicRecStart() {
+  if (!SR || panicWatching || !panicArmed() || !earsStream) return;
+  panicWatching = true;
+  panic.wordHits = [];
+  const re = panicWordRe(panic.word);
+  const boot = () => {
+    if (!panicWatching) return;
+    try {
+      panicRec = new SR();
+      panicRec.lang = "en-US";
+      panicRec.continuous = true;
+      panicRec.interimResults = true;
+      panicRec.onresult = (ev) => {
+        const now = Date.now();
+        for (let i = 0; i < ev.results.length; i++) {
+          const txt = (ev.results[i][0] && ev.results[i][0].transcript) || "";
+          if (re.test(txt)) {
+            panic.wordHits.push(now);
+            panic.wordHits = panic.wordHits.filter((t) => now - t <= 6000);
+            if (panicWordFired(panic.wordHits, now) && panicCanTrigger(now)) {
+              startPanicCountdown("panic-word");
+              break;
+            }
+          }
+        }
+      };
+      // Chrome stops recognition on silence / ~60s — reboot it.
+      panicRec.onend = () => { if (panicWatching) setTimeout(boot, 900); };
+      panicRec.onerror = () => { /* onend follows; boot retries */ };
+      panicRec.start();
+    } catch (e) { panicWatching = false; }
+  };
+  boot();
+}
+function panicRecStop() {
+  panicWatching = false;
+  try { if (panicRec) panicRec.stop(); } catch (e) {}
+  panicRec = null;
+}
+
 function earsSample() {
   const n = earsAnalyser.frequencyBinCount;
   const freq = new Uint8Array(n), td = new Uint8Array(earsAnalyser.fftSize);
@@ -484,9 +758,16 @@ $("btn-ears").onclick = async () => {
       try { earRecorder.stop(); } catch (e) { /* already stopped */ }
     }
     earRecorder = null; earChunks = []; earLevelHist = [];
+    panicRecStop(); panicAlarmStop(); // panic lifecycle ends with ears
+    clearTimeout(panic.countTimer); panic.countTimer = null;
+    panic.active = false;
+    panic.machine.state = "idle"; panic.machine.endsAt = 0;
+    $("panic-overlay").style.display = "none";
+    $("panic-alert").style.display = "none";
     earsStream.getTracks().forEach((t) => t.stop()); earsStream = null;
     if (earsCtx) { earsCtx.close(); earsCtx = null; }
     $("btn-ears").textContent = "👂 Enable ears";
+    panicStatus();
     return;
   }
   if (!bridgeActive()) { alert("Ears need the Bridge transport."); return; }
@@ -520,6 +801,15 @@ $("btn-ears").onclick = async () => {
       } catch (e) { earRecorder = null; /* clips off; detection still runs */ }
     }
     earFastTimer = setInterval(earFastSample, 100);
+    /* panic mode: arm after enable (needs >10s open before it can trigger) */
+    panic.earOpenMs = Date.now();
+    panic.loc = null;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC && !panicAudioCtx) panicAudioCtx = new AC(); // gesture-time init
+    } catch (e) {}
+    panicRecStart();
+    panicStatus();
     mascotEvent("curious");
   } catch (e) {
     $("eyes-note").textContent = "Microphone blocked: " + e.message;
@@ -531,9 +821,11 @@ function earFastSample() {
   if (!earsAnalyser) return;
   const s = earsSample();
   const now = Date.now();
-  earLevelHist.push({ t: now, level: s.level, mid: s.mid });
+  earLevelHist.push({ t: now, level: s.level, mid: s.mid, tr: panicTrebleRatio(s) });
   const cutoff = now - 10000;
   while (earLevelHist.length && earLevelHist[0].t < cutoff) earLevelHist.shift();
+  panicTick(now);
+  if (panic.active) return; /* panic overrides personality: no brain chatter */
   if (!canFireEvent(earLastEventMs, now)) return;
   const startle = detectStartle(earLevelHist);
   const laugh = startle ? null : detectLaughter(earLevelHist);
@@ -646,6 +938,7 @@ $("btn-mute").onclick = () => {
   if (voiceMuted) speechSynthesis.cancel();
 };
 function speakReply(text) {
+  if (panic.active) return; /* panic overrides personality: stay silent */
   if (voiceMuted || !("speechSynthesis" in window)) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
@@ -680,6 +973,7 @@ if (!SR) {
   };
   rec.onend = () => {
     if (recActive) { recActive = false; $("btn-voice").textContent = "🎙 Hold to talk"; }
+    if (earsStream) panicRecStart(); /* resume panic-word listening */
   };
   rec.onerror = (ev) => {
     $("voice-status").textContent = "mic error: " + ev.error;
@@ -690,6 +984,7 @@ if (!SR) {
     e.preventDefault();
     if (!bridgeActive()) { alert("Voice needs the Bridge transport."); return; }
     if (recActive) return;
+    panicRecStop(); /* one recognition at a time — pause panic-word listener */
     recActive = true;
     vbtn.textContent = "🎙 Listening… release";
     $("voice-status").textContent = "listening…";
@@ -725,3 +1020,8 @@ renderTransports();
 setInterval(refreshBridgeStatus, 5000);
 setInterval(pollThoughts, 2000);
 pokeIdle();
+panicLoad();
+["panic-contact", "panic-name", "panic-word", "panic-mode"].forEach((id) =>
+  $(id).addEventListener("change", panicSave));
+$("panic-cancel").onclick = cancelPanic;
+$("panic-safe").onclick = panicStandDown;

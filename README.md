@@ -13,6 +13,7 @@
 - 🎮 **Phone remote** — D-pad + brain controls from your phone (honest about hardware limits: no fake button presses)
 - 🔁 **Autonomous Playground** — sense → decide → act loop that runs on its own, with battery/quiet-hours/cooldown interlocks
 - 🧰 **Full control stack** — USB serial bridge + HTTP API + web dashboard (terminal, files, apps, UberGuidoZ library on demand)
+- 🚨 **Panic mode** — if you're in danger, a scream or your panic word (said twice) starts a 5s cancel countdown, then alerts your emergency contact by SMS/WhatsApp with your location — silent or with a loud alarm (see [Ears](docs/EARS.md); not a replacement for 911)
 
 ![Dashboard](docs/assets/dashboard.png)
 

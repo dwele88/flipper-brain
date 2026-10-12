@@ -144,6 +144,23 @@
     <div id="eyes-zones" class="zones" aria-hidden="true"></div>
     <div id="eyes-note" class="hint"></div>
     <div id="ears-clips" style="display:none"></div>
+    <div id="panic-settings">
+      <h3>🚨 Panic mode</h3>
+      <p class="hint">If you're in danger, the phone can raise the alarm and text your emergency contact. Nothing is armed until you set a contact.</p>
+      <div class="row">
+        <input type="tel" id="panic-contact" placeholder="emergency contact phone" autocomplete="off">
+        <input type="text" id="panic-name" placeholder="your name (for the alert)" autocomplete="off">
+      </div>
+      <div class="row">
+        <input type="text" id="panic-word" placeholder="panic word" autocomplete="off" style="max-width:140px">
+        <select id="panic-mode" title="alert mode">
+          <option value="silent">🔇 silent alert</option>
+          <option value="alarm">🔊 alarm + alert</option>
+        </select>
+      </div>
+      <div id="panic-status" class="hint">panic off — set an emergency contact to arm it.</div>
+      <p class="hint">Honest limits: this is <b>not</b> a security system and <b>not</b> a replacement for 911. It only works while this screen is open with the mic on. The SMS opens pre-filled — <b>you still have to tap send</b>. Panic-word listening needs a network connection.</p>
+    </div>
   </section>
 
   <section class="card" id="sec-remote" style="grid-column: 1 / -1;">
@@ -186,6 +203,24 @@
 </main>
 
 <div id="mascot-dock"></div>
+
+<div id="panic-overlay" style="display:none">
+  <h2>🚨 PANIC</h2>
+  <div id="panic-reason" class="hint"></div>
+  <div id="panic-count">5</div>
+  <p class="hint">Alerting your emergency contact.<br>False alarm? Cancel now.</p>
+  <button id="panic-cancel" class="panic-big">I'm OK — CANCEL</button>
+</div>
+<div id="panic-alert" style="display:none">
+  <h2>🚨 ALERT READY</h2>
+  <div id="panic-alert-reason" class="hint"></div>
+  <p class="hint">Your messaging app should have opened with the alert pre-filled — <b>tap send</b>. Or use WhatsApp:</p>
+  <div class="row" style="justify-content:center">
+    <a id="panic-sms" href="#"><button class="panic-big">📩 Open SMS</button></a>
+    <a id="panic-wa" href="#" target="_blank" rel="noopener"><button class="panic-big ghost">💬 WhatsApp</button></a>
+  </div>
+  <button id="panic-safe" class="ghost panic-big">I'm safe — stand down</button>
+</div>
 
 <script src="transport.js"></script>
 <script src="app.js"></script>
