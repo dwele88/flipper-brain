@@ -242,6 +242,7 @@ async function pollThoughts() {
       box.appendChild(div);
       box.scrollTop = box.scrollHeight;
       if (t.event) mascotEvent(t.event);
+      if (t.speak) speakReply(t.text); /* reactive-hearing talk-back */
     }
     while (box.children.length > 60) box.removeChild(box.firstChild);
   } catch (e) { /* bridge down */ }
@@ -342,6 +343,9 @@ $("lib-q").addEventListener("keydown", (e) => { if (e.key === "Enter") libSearch
 /* ---------------- eyes + ears (bridge only) ---------------- */
 let eyesStream = null, eyesTimer = null, earsStream = null, earsTimer = null;
 let earsCtx = null, earsAnalyser = null;
+/* reactive hearing: fast level history, rolling recorder buffer, clips */
+let earFastTimer = null, earLevelHist = [], earLastEventMs = 0;
+let earRecorder = null, earChunks = [], earClips = [];
 const eyesVideo = $("eyes-video"), eyesCanvas = $("eyes-canvas");
 const ectx = eyesCanvas.getContext("2d", { willReadFrequently: true });
 
@@ -410,6 +414,40 @@ $("btn-eyes").onclick = async () => {
   }
 };
 
+/* DETECTORS-START — pure functions; unit-tested in node, see tests/ */
+function detectStartle(hist) {
+  // hist: [{t, level}] ascending by t. A startle is a sudden loud jump:
+  // peak > 0.7 with a rise > 0.5 from the pre-peak baseline within 500ms.
+  if (!hist || hist.length < 3) return null;
+  const now = hist[hist.length - 1].t;
+  const recent = hist.filter((s) => now - s.t <= 500);
+  if (recent.length < 3) return null;
+  let peak = -1, peakIdx = -1;
+  recent.forEach((s, i) => { if (s.level > peak) { peak = s.level; peakIdx = i; } });
+  if (peak < 0.7 || peakIdx < 1) return null;
+  const base = Math.min.apply(null,
+    recent.slice(0, peakIdx).map((s) => s.level));
+  return (peak - base > 0.5) ? { peak: peak } : null;
+}
+function detectLaughter(hist) {
+  // hist: [{t, mid}] ascending by t. Laughter is 3+ mid-band peaks
+  // ("ha-ha-ha") above 0.45 inside a 2s window, peaks >= 150ms apart.
+  if (!hist || hist.length < 5) return null;
+  const now = hist[hist.length - 1].t;
+  const win = hist.filter((s) => now - s.t <= 2000);
+  let peaks = 0, lastPeakT = -1e9;
+  for (let i = 1; i < win.length - 1; i++) {
+    const s = win[i];
+    if (s.mid > 0.45 && s.mid >= win[i - 1].mid && s.mid >= win[i + 1].mid &&
+        s.t - lastPeakT >= 150) { peaks++; lastPeakT = s.t; }
+  }
+  return peaks >= 3 ? { peaks: peaks } : null;
+}
+function canFireEvent(lastEventMs, nowMs) {
+  return (nowMs - lastEventMs) >= 15000; // max 1 event / 15s
+}
+/* DETECTORS-END */
+
 function earsSample() {
   const n = earsAnalyser.frequencyBinCount;
   const freq = new Uint8Array(n), td = new Uint8Array(earsAnalyser.fftSize);
@@ -441,6 +479,11 @@ async function captureEarSample() {
 $("btn-ears").onclick = async () => {
   if (earsStream) {
     clearInterval(earsTimer); earsTimer = null;
+    if (earFastTimer) { clearInterval(earFastTimer); earFastTimer = null; }
+    if (earRecorder && earRecorder.state !== "inactive") {
+      try { earRecorder.stop(); } catch (e) { /* already stopped */ }
+    }
+    earRecorder = null; earChunks = []; earLevelHist = [];
     earsStream.getTracks().forEach((t) => t.stop()); earsStream = null;
     if (earsCtx) { earsCtx.close(); earsCtx = null; }
     $("btn-ears").textContent = "👂 Enable ears";
@@ -460,11 +503,95 @@ $("btn-ears").onclick = async () => {
     src.connect(earsAnalyser);
     $("btn-ears").textContent = "👂 Disable ears";
     earsTimer = setInterval(captureEarSample, 1000);
+    /* reactive hearing: rolling ~10s recorder buffer + 10Hz detectors.
+       Mic records ONLY while the Ears screen is enabled — never in background. */
+    earLevelHist = []; earLastEventMs = 0; earChunks = [];
+    if (window.MediaRecorder) {
+      try {
+        earRecorder = new MediaRecorder(earsStream);
+        earRecorder.ondataavailable = (ev) => {
+          if (ev.data && ev.data.size) {
+            earChunks.push({ t: Date.now(), data: ev.data });
+            const cutoff = Date.now() - 10000;
+            while (earChunks.length && earChunks[0].t < cutoff) earChunks.shift();
+          }
+        };
+        earRecorder.start(500);
+      } catch (e) { earRecorder = null; /* clips off; detection still runs */ }
+    }
+    earFastTimer = setInterval(earFastSample, 100);
     mascotEvent("curious");
   } catch (e) {
     $("eyes-note").textContent = "Microphone blocked: " + e.message;
   }
 };
+
+/* 10Hz detector tick: feeds history, fires startle/laughter events. */
+function earFastSample() {
+  if (!earsAnalyser) return;
+  const s = earsSample();
+  const now = Date.now();
+  earLevelHist.push({ t: now, level: s.level, mid: s.mid });
+  const cutoff = now - 10000;
+  while (earLevelHist.length && earLevelHist[0].t < cutoff) earLevelHist.shift();
+  if (!canFireEvent(earLastEventMs, now)) return;
+  const startle = detectStartle(earLevelHist);
+  const laugh = startle ? null : detectLaughter(earLevelHist);
+  const hit = startle ? { kind: "startle", peak: startle.peak }
+    : laugh ? { kind: "laughter", peak: Math.min(1, s.level) } : null;
+  if (!hit) return;
+  earLastEventMs = now;
+  freezeEarClip(hit.kind, now);
+  api("/api/ears/event", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ t: now / 1000, kind: hit.kind, peak: hit.peak }),
+  }).catch(() => { /* bridge hiccup; the clip is still local */ });
+  $("eyes-note").textContent = hit.kind === "startle"
+    ? "😲 startle! the brain is reacting…" : "😂 laughter! the brain is reacting…";
+  mascotEvent(hit.kind === "startle" ? "curious" : "happy");
+}
+
+function freezeEarClip(kind, now) {
+  /* Freeze the last ~4s of the rolling buffer as a replayable clip. */
+  if (!earRecorder) return;
+  const parts = earChunks.filter((c) => c.t >= now - 4000).map((c) => c.data);
+  if (!parts.length) return;
+  const blob = new Blob(parts, { type: earRecorder.mimeType || "audio/webm" });
+  const url = URL.createObjectURL(blob);
+  earClips.unshift({ url: url, kind: kind, t: now });
+  while (earClips.length > 10) {
+    const old = earClips.pop();
+    URL.revokeObjectURL(old.url);
+  }
+  renderEarClips();
+}
+
+function renderEarClips() {
+  const box = $("ears-clips");
+  box.innerHTML = "";
+  if (!earClips.length) { box.style.display = "none"; return; }
+  box.style.display = "";
+  const label = document.createElement("div");
+  label.className = "hint";
+  label.textContent = "🎞 caught sounds — tap play to hear what the brain heard:";
+  box.appendChild(label);
+  earClips.forEach((c) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    const tag = document.createElement("span");
+    tag.className = "hint";
+    tag.textContent = (c.kind === "startle" ? "😲 " : "😂 ") +
+      new Date(c.t).toLocaleTimeString();
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.src = c.url;
+    audio.preload = "metadata";
+    audio.style.maxWidth = "100%";
+    row.appendChild(tag);
+    row.appendChild(audio);
+    box.appendChild(row);
+  });
+}
 
 /* ---------------- remote: d-pad + brain control + voice ---------------- */
 document.querySelectorAll(".dpad button").forEach((b) => {

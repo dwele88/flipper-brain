@@ -115,6 +115,10 @@ curl localhost:8787/api/playground/thoughts?since=0
 |---|---|---|---|
 | POST | `/api/eyes/frame` | `{t, w, h, px}` — base64 grayscale bytes, `len == w*h` | `{brightness, motion, zones[9], signature}` — brightness/motion 0..1, 3×3 zone map |
 | POST | `/api/ears` | `{t, level, bass, mid, treble}` — all 0..1 | `{level, bass, mid, treble}` echoed |
+| POST | `/api/ears/event` | `{t, kind, peak}` — kind `startle`\|`laughter`, peak 0..1 | `{kind, peak}` queued — brain reacts next cycle |
+
+`kind` outside `startle`/`laughter` (or a non-numeric `t`) → 400. Events older
+than 30s are dropped by the engine. See [EARS.md](EARS.md).
 
 Frames are ~48×36 grayscale at ~1/sec from the dashboard. The bridge keeps
 only the previous frame in memory (for motion); persistent learning lives in

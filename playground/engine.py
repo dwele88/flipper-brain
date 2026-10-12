@@ -26,6 +26,30 @@ from playground.sense_memory import (VisionMemory, HearingMemory,
                                       DEFAULT_HEARING_PATH)
 
 
+# Reactive hearing: one short spoken line per mood per sound event.
+# Kept to a single sentence each so speechSynthesis stays snappy.
+HEARING_REACTIONS = {
+    "gremlin": {
+        "startle": "Whoa! What broke? Tell me it wasn't me.",
+        "laughter": "Ha! Do that again, I need it for my collection.",
+    },
+    "explorer": {
+        "startle": "Something just happened over there — investigating.",
+        "laughter": "Fascinating. Humans make that noise when happy. Noted.",
+    },
+    "dj": {
+        "startle": "That drop hit different. What WAS that?",
+        "laughter": "Okay, that's a whole vibe. Run it back!",
+    },
+    "ghost": {
+        "startle": "...did you hear that too? I'm hiding.",
+        "laughter": "Even I almost smiled. Almost.",
+    },
+    "surprise": {
+        "startle": "Whoa! Okay. That was new. I liked it.",
+        "laughter": "Joy detected! Logging this as a core memory.",
+    },
+}
 class Playground:
     def __init__(self, flipper, cfg: dict):
         self.flipper = flipper
@@ -36,11 +60,14 @@ class Playground:
         self.hearing_memory = HearingMemory(
             self.cfg.get("hearing_memory_path", DEFAULT_HEARING_PATH))
         # Phone senses, written by the bridge (dashboard Eyes/Ears screens).
-        self._external = {"vision": None, "hearing": None}
+        # hearing_event is a one-shot: the loop consumes and clears it.
+        self._external = {"vision": None, "hearing": None,
+                          "hearing_event": None}
         self._ext_lock = threading.Lock()
         self._motion_hist = deque(maxlen=10)
         self._level_hist = deque(maxlen=12)
         self._last_loud_thought = 0.0
+        self._last_hearing_reaction = 0.0
         self._wake = threading.Event()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -98,15 +125,17 @@ class Playground:
 
     def set_external(self, kind: str, data: dict | None) -> None:
         """Bridge writes the latest vision/hearing sample here."""
-        if kind not in ("vision", "hearing"):
-            raise ValueError("kind must be 'vision' or 'hearing'")
+        if kind not in ("vision", "hearing", "hearing_event"):
+            raise ValueError(
+                "kind must be 'vision', 'hearing' or 'hearing_event'")
         with self._ext_lock:
             self._external[kind] = data
 
     def external_snapshot(self) -> dict:
         with self._ext_lock:
             return {"vision": self._external["vision"],
-                    "hearing": self._external["hearing"]}
+                    "hearing": self._external["hearing"],
+                    "hearing_event": self._external["hearing_event"]}
 
     def set_mood(self, mood: str) -> dict:
         """Switch mood now; starts the loop if it wasn't running."""
@@ -137,7 +166,8 @@ class Playground:
 
     # -- thoughts ----------------------------------------------------------
 
-    def _think(self, text: str, event: str | None = None) -> None:
+    def _think(self, text: str, event: str | None = None,
+               speak: bool = False) -> None:
         with self._lock:
             self._cursor += 1
             self._thoughts.append({
@@ -146,6 +176,7 @@ class Playground:
                 "mood": self._mood,
                 "text": text,
                 "event": event,
+                "speak": bool(speak),
             })
             if event:
                 self._last_event = event
@@ -368,6 +399,39 @@ class Playground:
         elif h:
             h["stale"] = True
 
+    def _react_to_hearing_event(self) -> None:
+        """Consume one queued hearing event and talk back, in character.
+
+        The dashboard's Ears screen detects startles (crash/thud/gasp) and
+        laughter and POSTs them to /api/ears/event. The brain answers with a
+        mood-voiced line marked speak=True so the dashboard voices it via
+        speechSynthesis. Events older than 30s are dropped — a stale scare
+        is not worth reliving. Engine-side 15s cooldown mirrors the dashboard
+        so a misbehaving client can't make the brain chatter nonstop.
+        """
+        with self._ext_lock:
+            ev = self._external.get("hearing_event")
+            self._external["hearing_event"] = None
+        if not isinstance(ev, dict):
+            return
+        try:
+            age = time.time() - float(ev.get("ts", 0))
+        except (TypeError, ValueError):
+            return
+        if age > 30:
+            return
+        kind = ev.get("kind")
+        if kind not in ("startle", "laughter"):
+            return
+        now = time.time()
+        if now - self._last_hearing_reaction < 15:
+            return
+        self._last_hearing_reaction = now
+        mood = self._mood if self._mood in HEARING_REACTIONS else "surprise"
+        line = HEARING_REACTIONS[mood][kind]
+        self._think(line, "happy" if kind == "laughter" else "curious",
+                    speak=True)
+
     def _loop(self, gen: int) -> None:
         assert self._mood is not None
         mood_key = self._mood
@@ -379,6 +443,7 @@ class Playground:
             state = merge_external(sense(self.flipper),
                                    self.external_snapshot())
             self._learn_senses(state)
+            self._react_to_hearing_event()
             if not state.get("reachable"):
                 self._think("Can't reach the Flipper over serial — retrying next cycle.",
                             None)

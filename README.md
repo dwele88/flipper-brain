@@ -8,7 +8,7 @@
 
 - 🧠 **A living personality** — 5 moods (😈 Gremlin · 🔭 Explorer · 🎧 DJ · 👻 Ghost · 🎲 Surprise Me) that change how it behaves and talks
 - 👀 **Eyes** — your phone's camera becomes its vision: brightness, motion, zone maps, scene recognition ("I've seen this place before")
-- 👂 **Ears** — your phone's mic becomes its hearing: loudness + pitch bands, learns noise patterns by hour, remembers the loudest thing it ever heard
+- 👂 **Ears** — your phone's mic becomes its hearing: loudness + pitch bands, learns noise patterns by hour, remembers the loudest thing it ever heard — and now it **reacts out loud**: startles and laughter get a mood-voiced spoken reply, with replayable sound clips (see [Ears](docs/EARS.md))
 - 🗣️ **Voice** — hold-to-talk commands with spoken replies in its own personality
 - 🎮 **Phone remote** — D-pad + brain controls from your phone (honest about hardware limits: no fake button presses)
 - 🔁 **Autonomous Playground** — sense → decide → act loop that runs on its own, with battery/quiet-hours/cooldown interlocks
@@ -58,6 +58,7 @@ sleepy when idle.
 - [API](docs/API.md) — every bridge endpoint with examples
 - [Playground](docs/PLAYGROUND.md) — moods, autonomy design, writing behaviors
 - [Eyes & Ears](docs/EYES.md) — phone senses, mood reactions, sense learning
+- [Reactive hearing](docs/EARS.md) — startle/laughter detection, spoken talk-back, sound clips
 - [Voice](docs/VOICE.md) — talk to the brain, command patterns, limits
 - [Library](docs/LIBRARY.md) — UberGuidoZ collection integration
 - [Safety](docs/SAFETY.md) — the hard rules (RX-only, etc.)

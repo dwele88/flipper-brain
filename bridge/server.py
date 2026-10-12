@@ -418,6 +418,28 @@ def create_app(config: dict) -> Flask:
         pg.set_external("hearing", sample)
         return jsonify({"ok": True, **sample})
 
+    # -- reactive hearing: startle / laughter events from the Ears screen ----
+    @app.route("/api/ears/event", methods=["POST"])
+    def ears_event():
+        import time as _time
+        body = request.get_json(force=True, silent=True) or {}
+        try:
+            ts = _ts(body.get("t"), _time.time())
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        kind = body.get("kind")
+        if kind not in ("startle", "laughter"):
+            return jsonify(
+                {"ok": False,
+                 "error": "kind must be 'startle' or 'laughter'"}), 400
+        try:
+            peak = max(0.0, min(1.0, float(body.get("peak", 0.0))))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "peak must be a number"}), 400
+        pg.set_external("hearing_event",
+                        {"ts": ts, "kind": kind, "peak": peak})
+        return jsonify({"ok": True, "kind": kind, "peak": peak})
+
     # -- voice (talk to the brain) --------------------------------------------
     @app.route("/api/voice", methods=["POST"])
     def voice():
