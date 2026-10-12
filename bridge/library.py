@@ -94,7 +94,10 @@ def get_tree(refresh: bool = False) -> list[dict]:
         data = _get(API_TREE, timeout=60)
     except Exception as exc:
         raise LibraryError(f"couldn't fetch repo tree: {exc}")
-    payload = json.loads(data)
+    try:
+        payload = json.loads(data)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise LibraryError(f"repo tree isn't valid JSON: {exc}")
     tree = [e for e in payload.get("tree", []) if e.get("type") == "blob"]
     os.makedirs(CACHE_DIR, exist_ok=True)
     tmp = TREE_CACHE + ".tmp"
@@ -134,7 +137,7 @@ def search(query: str, limit: int = 50) -> list[dict]:
 
 
 def cached_path(repo_path: str) -> str:
-    return os.path.join(CACHE_DIR, "files", repo_path)
+    return os.path.join(CACHE_DIR, "files", _safe_repo_path(repo_path))
 
 
 def download(repo_path: str) -> str:
@@ -144,7 +147,10 @@ def download(repo_path: str) -> str:
     local = cached_path(repo_path)
     if os.path.exists(local) and os.path.getsize(local) > 0:
         return local
-    data = _get(f"{RAW_BASE}/{repo_path}")
+    try:
+        data = _get(f"{RAW_BASE}/{repo_path}")
+    except Exception as exc:
+        raise LibraryError(f"couldn't download {repo_path}: {exc}")
     os.makedirs(os.path.dirname(local), exist_ok=True)
     tmp = local + ".tmp"
     with open(tmp, "wb") as fh:
