@@ -1,5 +1,7 @@
 # 🧠 Flipper Brain
 
+**The first Flipper Zero AI with moods, senses, and a mind of its own — 1st of its kind.**
+
 Your Flipper Zero, with a mind of its own. A Python bridge lets an AI (or you)
 operate the Flipper over USB serial, a web dashboard gives you manual control,
 and **Playground mode** runs an autonomous little brain with moods — it senses
